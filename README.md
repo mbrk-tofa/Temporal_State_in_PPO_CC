@@ -236,7 +236,7 @@ python analysis/inference_analysis.py
 ```bash
 python analysis/run_analysis.py
 ```
-
+All generated files will be stored in Temporal_State_in_PPO_CC/results
 ---
 
 ## Reproducibility
@@ -256,13 +256,13 @@ All reported figures and statistical analyses can be regenerated from the reposi
 
 ## Data Availability
 
-The source code, experimental configurations, training scripts, evaluation scripts, and analysis scripts supporting the findings of the associated publication are publicly available in this repository.
+The source code, experimental configurations, training scripts, evaluation scripts, trained models, training and evaluation logs, and analysis scripts supporting the findings of the associated publication are publicly available in this repository.
 
 ---
 
 ## Generative AI Disclosure
 
-Generative AI tools were used during manuscript preparation for language refinement, document organization, code-review assistance, and research discussions. All experimental design decisions, software implementation, model training, data collection, statistical analyses, and scientific conclusions were performed and verified by the authors.
+Generative AI tools were used for code development, code-review, assistance during manuscript preparation for draft review and language refinement, and research discussions. All experimental design decisions, code implementation, model training, data collection, statistical analyses, and scientific conclusions were performed and verified by the author.
 
 ---
 
