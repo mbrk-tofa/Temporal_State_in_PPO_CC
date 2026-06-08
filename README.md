@@ -222,13 +222,7 @@ The analysis scripts reproduce all statistical results, figures, and tables repo
 ### Training Convergence
 
 ```bash
-python analysis/training_curve.py
-```
-
-### Statistical Tests
-
-```bash
-python analysis/stat_tests.py
+python analysis/train_conv.py
 ```
 
 ### Inference Cost Analysis
@@ -237,7 +231,7 @@ python analysis/stat_tests.py
 python analysis/inference_analysis.py
 ```
 
-### Generate Publication Figures
+### Generate Other Publication Figures and Statistical Tests
 
 ```bash
 python analysis/run_analysis.py
