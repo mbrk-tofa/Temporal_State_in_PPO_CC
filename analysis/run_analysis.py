@@ -47,6 +47,7 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 # ------------------------------------------------------------------ #
 # Allow running from the project root without installing the package  #
@@ -58,7 +59,7 @@ from summary       import SummaryStats
 from plots         import Plotter
 from stat_tests    import StatTester
 from cost_analysis import CostAnalyser
-from training_curve      import TrainingCurve
+from train_conv import plot_convergence
 from inference_analysis  import (
     build_dataframe, plot_cdfs, plot_boxplots,
     plot_seed_variance, plot_step_drift, compute_summary_statistics,
@@ -68,14 +69,15 @@ from inference_analysis  import (
 # ------------------------------------------------------------------ #
 # Output directories — all results live under results/               #
 # ------------------------------------------------------------------ #
-CSV_DIR   = "results/csv"
-PLOTS_DIR = "results/plots"
-LATEX_DIR = "results/latex"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+CSV_DIR   = str(REPO_ROOT / "results" / "csv")
+PLOTS_DIR = str(REPO_ROOT / "results" / "plots")
+LATEX_DIR = str(REPO_ROOT / "results" / "latex")
 
 # ------------------------------------------------------------------ #
 # Available analysis modules                                          #
 # ------------------------------------------------------------------ #
-ALL_MODULES = ["plots"]#"summary", "plots", "stat_tests", "cost", "training_curve", "inference"]
+ALL_MODULES = ["summary", "plots", "stat_tests", "cost", "training_curve", "inference"]
 
 
 def parse_args():
@@ -84,12 +86,12 @@ def parse_args():
     )
     parser.add_argument(
         "--log-dir",
-        default="logs/eval",
-        help="Directory containing JSONL episode logs (default: logs/)",
+        default=str(REPO_ROOT / "logs" / "eval"),
+        help="Directory containing raw evaluation JSONL logs.",
     )
     parser.add_argument(
         "--cost-dir",
-        default="logs/cost_files",
+        default=str(REPO_ROOT / "logs" / "cost_files"),
         help="Directory containing inference cost JSON files "
              "(default: logs/cost_files/)",
     )
@@ -111,7 +113,7 @@ def banner(text):
 
 
 def main():
-    args    = args = parse_args()
+    args = parse_args()
     modules = set(args.only)
 
     # ---------------------------------------------------------------- #
@@ -185,13 +187,7 @@ def main():
     # ---------------------------------------------------------------- #
     if "training_curve" in modules:
         banner("Training convergence curve")
-        TrainingCurve(
-            log_dir=args.log_dir,
-            csv_dir=CSV_DIR,
-            plots_dir=PLOTS_DIR,
-            scenario="default",
-            smoothing=5,
-        ).run()
+        plot_convergence()
  
     # ---------------------------------------------------------------- #
     # Step 7 — Inference time CDF and statistics                        #

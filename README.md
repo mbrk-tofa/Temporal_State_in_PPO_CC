@@ -1,10 +1,10 @@
-# Temporal State Representation in PPO-Based Congestion Control
+# Finite Observation Histories versus Recurrent Memory in PPO-Based Congestion Control: A Controlled Simulation Study
 
 ## Overview
 
 This repository contains the source code, trained models, experimental logs, and analysis scripts accompanying the study:
 
-> **Temporal State Representation in PPO-Based Congestion Control**
+> **Finite Observation Histories versus Recurrent Memory in PPO-Based Congestion Control: A Controlled Simulation Study**
 
 The project investigates how different temporal state representation mechanisms influence the performance of reinforcement learning (RL) congestion-control policies. Specifically, it compares finite-horizon observation stacking with recurrent Long Short-Term Memory (LSTM) representations within a Proximal Policy Optimization (PPO) framework.
 
@@ -17,13 +17,13 @@ The study evaluates the effect of temporal representation on:
 * Training convergence
 * Inference cost
 
-while maintaining identical PPO algorithms, reward functions, training budgets, and network environments.
+while maintaining same PPO hyperparameters, reward functions, training budgets, and network environments.
 
 ---
 
 ## Research Objective
 
-Most prior RL-based congestion-control studies focus on reward design and algorithm selection. In contrast, this work investigates whether the mechanism used to encode temporal information influences congestion-control behavior.
+Most of the prior RL-based congestion-control studies focus on reward design and algorithm selection. In contrast, this work investigates whether the mechanism used to encode temporal information influences congestion-control behavior.
 
 Two temporal representation strategies are compared:
 
@@ -50,7 +50,7 @@ Temporal_State_in_PPO_CC/
 |   |--logs/models/
 |   |    |-- model1.zip
 |   |    |....
-│   ├── Train.py
+│   ├── Train5.py
 │   ├── eval_models.py
 │   ├── network_sim.py
 │   └── ...
@@ -58,7 +58,7 @@ Temporal_State_in_PPO_CC/
 ├── analysis/
 │   ├── inference_analysis.py
 │   ├── stat_tests.py
-│   ├── training_curve.py
+│   ├── training_conv.py
 │   ├── run_analysis.py
 │   └── ...
 │
@@ -196,7 +196,7 @@ pip install -r requirements.txt
 Train a model using:
 
 ```bash
-python gym/Train.py
+python gym/Train5.py
 ```
 
 Model-specific configurations can be adjusted within the corresponding configuration files.
@@ -219,19 +219,8 @@ Evaluation outputs are stored in the evaluation log directory.
 
 The analysis scripts reproduce all statistical results, figures, and tables reported in the manuscript.
 
-### Training Convergence
 
-```bash
-python analysis/train_conv.py
-```
-
-### Inference Cost Analysis
-
-```bash
-python analysis/inference_analysis.py
-```
-
-### Generate Other Publication Figures and Statistical Tests
+### Generate all figures and Statistical Tests
 
 ```bash
 python analysis/run_analysis.py
