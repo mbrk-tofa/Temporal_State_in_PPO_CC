@@ -24,11 +24,16 @@ import json
 import os
 import sys
 import inspect
+from pathlib import Path
 currentdir = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 parentdir = os.path.dirname(currentdir)
 sys.path.insert(0,parentdir) 
 from common import sender_obs, config
 from common.simple_arg_parse import arg_or_default
+
+# Persist artefacts at the repository root, independent of the launch directory.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LOG_ROOT = REPO_ROOT / "logs"
 
 MAX_CWND = 5000
 MIN_CWND = 4
@@ -397,21 +402,21 @@ class SimulatedNetworkEnv(gymnasium.Env):
         self.current_episode_events = []
         self.episodes_run = -1
 
-        os.makedirs("logs/train", exist_ok=True)
-        os.makedirs("logs/eval",  exist_ok=True)
+        (LOG_ROOT / "train").mkdir(parents=True, exist_ok=True)
+        (LOG_ROOT / "eval").mkdir(parents=True, exist_ok=True)
 
         if self.phase == "train":
             # Compact episode-level training log — cleared on fresh run.
-            self.train_log_filename = (
-                f"logs/train/{self.model_type}_seed_{self.seed_id}.jsonl"
+            self.train_log_filename = str(
+                LOG_ROOT / "train" / f"{self.model_type}_seed_{self.seed_id}.jsonl"
             )
             if os.path.exists(self.train_log_filename):
                 os.remove(self.train_log_filename)
             self.log_filename = None   # no per-step eval log for train envs
         else:
             # Full per-step evaluation log — cleared on fresh run.
-            self.log_filename = (
-                f"logs/eval/{self.model_type}_{self.scenario_name}_seed_{self.seed_id}.jsonl"
+            self.log_filename = str(
+                LOG_ROOT / "eval" / f"{self.model_type}_{self.scenario_name}_seed_{self.seed_id}.jsonl"
             )
             if os.path.exists(self.log_filename):
                 os.remove(self.log_filename)

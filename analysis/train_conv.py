@@ -24,6 +24,7 @@ Output
 
 import os
 import json
+from pathlib import Path
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -38,8 +39,10 @@ import matplotlib.ticker as ticker
 # TRAIN_LOG_DIR = os.path.join(SCRIPT_DIR, "logs", "train")
 # OUT_DIR       = os.path.join(SCRIPT_DIR, "results", "plots")
 # os.makedirs(OUT_DIR, exist_ok=True)
-TRAIN_LOG_DIR = "logs/train"
-OUT_DIR       = "results/plots"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+TRAIN_LOG_DIR = str(REPO_ROOT / "logs" / "train")
+OUT_DIR       = str(REPO_ROOT / "results" / "plots")
+os.makedirs(OUT_DIR, exist_ok=True)
 
 SEEDS  = [2, 7, 13, 18, 24]
 N_ENVS = 4   # workers per seed

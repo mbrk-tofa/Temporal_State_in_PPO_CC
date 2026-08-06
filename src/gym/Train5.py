@@ -11,6 +11,9 @@ import numpy as np
 import json
 import time
 import os
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # ─────────────────────────────────────────────
 # HARDWARE CONFIGURATION
@@ -27,7 +30,7 @@ import os
 # is safer. Env stepping always runs on CPU regardless of this setting.
 
 torch.set_num_threads(1)
-DEVICE = "cpu"# if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 print(f"{'='*60}")
 print(f"Hardware configuration")
@@ -78,7 +81,7 @@ MODELS = {
     "stacking3HL":  {"policy": "MlpPolicy",     "history_len": 3},
     "stacking5HL":  {"policy": "MlpPolicy",     "history_len": 5},
     "stacking10HL": {"policy": "MlpPolicy",     "history_len": 10},
-    "lstm":         {"policy": "MlpLstmPolicy", "history_len": 1},
+    #"lstm":         {"policy": "MlpLstmPolicy", "history_len": 1},
 }
 
 # OOD evaluation scenarios (training distribution excluded per methodology)
@@ -113,7 +116,7 @@ CKPT_FREQ = 50_000
 #       param_counts.json
 #     progress.json                     ← atomic ledger (single source of truth)
 
-LOGS_DIR      = "logs"
+LOGS_DIR      = str(REPO_ROOT / "logs")
 CKPT_DIR      = os.path.join(LOGS_DIR, "checkpoints")
 MODELS_DIR    = os.path.join(LOGS_DIR, "models")
 COST_DIR      = os.path.join(LOGS_DIR, "cost_files")
@@ -218,17 +221,30 @@ def _latest_checkpoint(model_type, seed):
 # This guarantees the training log state is exactly consistent with the
 # checkpoint — no partial episodes, no missing episodes.
 
-def _save_train_log_snapshot(model_type, seed, ckpt_steps):
-    """Read current training log files and save them alongside the checkpoint."""
+def _save_train_log_snapshot(model_type, seed, ckpt_steps, env):
+    """Read training log files and reward_ewma values; save alongside checkpoint.
+
+    env is the live SubprocVecEnv. reward_ewma is read from each worker
+    subprocess via get_attr so EWMA continuity is preserved on resume.
+    Falls back to 0.0 per worker if get_attr fails.
+    """
+    try:
+        ewma_values = env.get_attr("reward_ewma")   # list of length N_ENVS
+    except Exception:
+        ewma_values = [0.0] * N_ENVS
+
     snapshot = {}
     for rank in range(N_ENVS):
         seed_id = seed + rank
         path = _train_log_path(model_type, seed_id)
+        content = ""
         if os.path.exists(path):
             with open(path) as f:
-                snapshot[str(seed_id)] = f.read()
-        else:
-            snapshot[str(seed_id)] = ""
+                content = f.read()
+        snapshot[str(seed_id)] = {
+            "log_content": content,
+            "reward_ewma": ewma_values[rank],
+        }
 
     snap_path = _train_log_snapshot_path(model_type, seed, ckpt_steps)
     tmp = snap_path + ".tmp"
@@ -237,24 +253,24 @@ def _save_train_log_snapshot(model_type, seed, ckpt_steps):
     os.replace(tmp, snap_path)
 
 
-def _restore_train_log_snapshot(model_type, seed, ckpt_steps):
-    """Restore training log files from the snapshot taken at checkpoint time.
+def _restore_train_log_snapshot(model_type, seed, ckpt_steps, env):
+    """Restore training log files and reward_ewma from the checkpoint snapshot.
 
-    Called before spawning SubprocVecEnv workers on resume, so that workers
-    inherit a log state that is exactly consistent with the checkpoint weights.
-    Workers clear their log file in __init__ before appending — we must restore
-    AFTER the workers are constructed but BEFORE they start stepping.
+    env is the already-constructed SubprocVecEnv — workers have run __init__
+    and cleared their log files. We overwrite the cleared files with snapshot
+    content, then push the saved reward_ewma into each worker subprocess via
+    env_method so the EWMA filter continues from where it left off rather than
+    restarting from zero (which would cause a sawtooth in the convergence plot).
 
-    Because SubprocVecEnv __init__ clears files synchronously during worker
-    startup, we restore AFTER env construction so our restore wins.
+    Ordering contract:
+      1. _make_train_env()                  — workers start, clear log files
+      2. _restore_train_log_snapshot(env)   — restore files + EWMA into workers
+      3. model.learn()                      — training resumes
     """
     snap_path = _train_log_snapshot_path(model_type, seed, ckpt_steps)
     if not os.path.exists(snap_path):
-        # No snapshot for this checkpoint — training logs will be incomplete
-        # for this seed but this is not fatal; convergence plot will show
-        # only post-resume episodes for this seed.
-        print(f"  [warn] no training log snapshot found for {model_type} "
-              f"seed {seed} at step {ckpt_steps} — log continuity not guaranteed")
+        print(f"  [warn] no snapshot for {model_type} seed {seed} "
+              f"at step {ckpt_steps} — log and EWMA continuity not guaranteed")
         return
 
     with open(snap_path) as f:
@@ -262,12 +278,31 @@ def _restore_train_log_snapshot(model_type, seed, ckpt_steps):
 
     for rank in range(N_ENVS):
         seed_id = seed + rank
-        content = snapshot.get(str(seed_id), "")
+        entry   = snapshot.get(str(seed_id), {})
+
+        # Backward-compatible: old snapshots stored a plain string, new ones
+        # store {"log_content": ..., "reward_ewma": ...}
+        if isinstance(entry, dict):
+            log_content = entry.get("log_content", "")
+            ewma        = entry.get("reward_ewma", 0.0)
+        else:
+            log_content = entry   # old format: raw JSONL string
+            ewma        = 0.0     # no EWMA in old snapshots — restart from 0
+
+        # Restore log file — overwrite the empty file workers created in __init__
         path = _train_log_path(model_type, seed_id)
-        # Overwrite whatever the worker __init__ wrote (empty file) with
-        # the snapshot content, restoring pre-checkpoint episodes.
         with open(path, "w") as f:
-            f.write(content)
+            f.write(log_content)
+
+        # Restore reward_ewma into the live worker subprocess.
+        # restore_ewma() is defined in network_sim.SimulatedNetworkEnv.
+        # Wrapped in try/except: a subprocess communication failure degrades
+        # gracefully — EWMA restarts from 0 for that worker rather than
+        # crashing the run.
+        try:
+            env.env_method("restore_ewma", ewma, indices=[rank])
+        except Exception as e:
+            print(f"  [warn] could not restore ewma for worker {rank}: {e}")
 
 
 # ─────────────────────────────────────────────
@@ -291,10 +326,15 @@ class SnapshotCheckpointCallback(CheckpointCallback):
     def _on_step(self) -> bool:
         result = super()._on_step()
         # super()._on_step() saves the zip when the frequency is hit.
-        # We read num_timesteps from the model to find the matching snapshot path.
+        # self.training_env is the live SubprocVecEnv — passed to
+        # _save_train_log_snapshot so it can read reward_ewma from each
+        # worker subprocess via get_attr.
         if self.n_calls % self.save_freq == 0:
             ckpt_steps = self.model.num_timesteps
-            _save_train_log_snapshot(self.model_type, self.seed, ckpt_steps)
+            _save_train_log_snapshot(
+                self.model_type, self.seed, ckpt_steps,
+                self.training_env,
+            )
         return result
 
 
@@ -413,7 +453,7 @@ def train_model(model_type, seed, progress):
 
         # Now restore snapshot content over the cleared files.
         # This must happen after env construction and before model.learn().
-        _restore_train_log_snapshot(model_type, seed, ckpt_steps)
+        _restore_train_log_snapshot(model_type, seed, ckpt_steps, env)
 
         model = _load_model(model_type, env, ckpt_path)
         model.num_timesteps = ckpt_steps
@@ -579,10 +619,6 @@ if __name__ == "__main__":
             model, training_time, param_count = train_model(model_type, seed, progress)
             _update_cost_logs(progress)
 
-            for scenario_name, params in SCENARIOS.items():
-                print(f"\nEvaluating: {model_type} | seed {seed} | {scenario_name}")
-                evaluate_model(model, model_type, seed, scenario_name, params, progress)
-
             _update_cost_logs(progress)
 
-    print("\nAll experiments complete.")
+    print("\nAll training runs complete. Run eval_models.py to evaluate saved models.")

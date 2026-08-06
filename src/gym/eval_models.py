@@ -39,6 +39,7 @@ import numpy as np
 import json
 import time
 import os
+from pathlib import Path
 
 # ─────────────────────────────────────────────
 # HARDWARE  (inference only — GPU not critical
@@ -83,18 +84,20 @@ SCENARIOS = {
 # All paths are anchored to the directory containing this script,
 # not the working directory from which Python is invoked.
 # This means the script works correctly regardless of where you run it from:
-#   python root/src/gym/run_eval_only.py          OK
-#   cd root && python src/gym/run_eval_only.py    OK
-#   cd root/src/gym && python run_eval_only.py    OK
+#   python src/gym/eval_models.py                 OK
+#   cd src/gym && python eval_models.py           OK
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-LOGS_DIR   = os.path.join(SCRIPT_DIR, "logs")
-MODELS_DIR = os.path.join(LOGS_DIR, "models")
-COST_DIR   = os.path.join(LOGS_DIR, "cost_files")
-EVAL_DIR   = os.path.join(LOGS_DIR, "eval")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+LOGS_DIR = REPO_ROOT / "logs"
+MODELS_DIR = LOGS_DIR / "models"
+# Archived model zips used the pre-standardisation location. The fallback
+# keeps them usable while all newly trained models use logs/models/.
+LEGACY_MODELS_DIR = Path(__file__).resolve().parent / "logs" / "models"
+COST_DIR = LOGS_DIR / "cost_files"
+EVAL_DIR = LOGS_DIR / "eval"
 
 for d in [COST_DIR, EVAL_DIR]:
-    os.makedirs(d, exist_ok=True)
+    d.mkdir(parents=True, exist_ok=True)
 
 
 # ─────────────────────────────────────────────
@@ -102,7 +105,10 @@ for d in [COST_DIR, EVAL_DIR]:
 # ─────────────────────────────────────────────
 
 def _final_model_path(model_type, seed):
-    return os.path.join(MODELS_DIR, f"{model_type}_seed{seed}.zip")
+    canonical = MODELS_DIR / f"{model_type}_seed{seed}.zip"
+    if canonical.exists():
+        return str(canonical)
+    return str(LEGACY_MODELS_DIR / f"{model_type}_seed{seed}.zip")
 
 def _load_model(model_type, seed):
     """Load a final trained model zip and attach a minimal dummy env.
@@ -163,8 +169,7 @@ def run_evaluation(model, model_type, seed, scenario_name, params):
             scenario_name=scenario_name,
             model_type=model_type,
             seed_id=s,
-            phase="train",    # suppress network_sim JSONL — not needed here;
-                              # per-step inference times are captured directly below
+            phase="eval",
         )
 
     env       = DummyVecEnv([make_eval_env])
